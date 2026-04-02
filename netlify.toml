@@ -1,0 +1,16 @@
+[build]
+  # 1. Choose the command based on your package.json scripts
+  command = "npm run build"
+
+  # 2. MATCH YOUR BUILD TOOL:
+  # Use "dist" if you use Vite. Use "build" if you use Create React App.
+  publish = "dist" 
+
+  # 3. Base directory should be empty if package.json is at the top level
+  base = ""
+
+[[redirects]]
+  # This prevents 404 errors when you refresh sub-pages in a React Router app
+  from = "/*"
+  to = "/index.html"
+  status = 200
