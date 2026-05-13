@@ -1,0 +1,124 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "User profile information stored in Firestore",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "username": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "phone": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "user"] }
+      },
+      "required": ["id", "name", "email", "role"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Rice product details",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "price": { "type": "number" },
+        "image": { "type": "string", "format": "uri" },
+        "category": { "type": "string" },
+        "rating": { "type": "number" },
+        "order": { "type": "integer" }
+      },
+      "required": ["id", "name", "price"]
+    },
+    "Settings": {
+      "title": "Farm Settings",
+      "description": "Global settings for the farm and website",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "format": "email" },
+        "phone": { "type": "string" },
+        "location": { "type": "string" },
+        "googleMapsLink": { "type": "string", "format": "uri" },
+        "googleMapsEmbed": { "type": "string", "format": "uri" },
+        "heroImage": { "type": "string", "format": "uri" },
+        "menuFontColor": { "type": "string" },
+        "menuIconColor": { "type": "string" },
+        "brandTitleColor": { "type": "string" },
+        "brandIconColor": { "type": "string" },
+        "footerText": { "type": "string" }
+      }
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Customer order details",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "items": { "type": "array", "items": { "type": "object" } },
+        "total": { "type": "number" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "customer": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string" },
+            "name": { "type": "string" },
+            "email": { "type": "string", "format": "email" },
+            "phone": { "type": "string" }
+          }
+        }
+      },
+      "required": ["id", "items", "total", "timestamp", "customer"]
+    },
+    "Inquiry": {
+      "title": "Inquiry",
+      "description": "Customer inquiry message",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "phone": { "type": "string" },
+        "subject": { "type": "string" },
+        "message": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "email", "message", "date"]
+    },
+    "UsernameMapping": {
+      "title": "Username Mapping",
+      "description": "Maps a username to a user's UID and email for login purposes",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string", "format": "email" }
+      },
+      "required": ["uid", "email"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Collection of user profiles"
+    },
+    "/usernames/{username}": {
+      "schema": "UsernameMapping",
+      "description": "Collection for username-to-email mapping"
+    },
+    "/products/{productId}": {
+      "schema": "Product",
+      "description": "Collection of rice products"
+    },
+    "/settings/farm": {
+      "schema": "Settings",
+      "description": "Global farm settings document"
+    },
+    "/orders/{orderId}": {
+      "schema": "Order",
+      "description": "Collection of customer orders"
+    },
+    "/inquiries/{inquiryId}": {
+      "schema": "Inquiry",
+      "description": "Collection of customer inquiries"
+    }
+  }
+}
