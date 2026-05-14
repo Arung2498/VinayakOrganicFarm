@@ -2004,6 +2004,412 @@ ${inquiryForm.message}
                           <th className="py-4 text-xs font-bold uppercase tracking-wider text-[#8E8A84]">Username</th>
                           <th className="py-4 text-xs font-bold uppercase tracking-wider text-[#8E8A84]">Email</th>
                           <th className="py-4 text-xs font-bold uppercase tracking-wider text-[#8E8A84]">Phone</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#E5E1D8]">
+                        {adminData.users.map(user => (
+                          <tr key={user.id}>
+                            <td className="py-4 text-sm font-medium">{user.name}</td>
+                            <td className="py-4 text-sm text-[#8E8A84]">{user.username}</td>
+                            <td className="py-4 text-sm text-[#8E8A84]">{user.email}</td>
+                            <td className="py-4 text-sm text-[#8E8A84]">{user.phone}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Inquiries Section */}
+                <div className="bg-white p-8 rounded-3xl border border-[#E5E1D8]">
+                  <h4 className="text-xl font-serif font-bold mb-6 flex items-center gap-2">
+                    <Mail size={24} className="text-[#8B9D77]" /> Wholesale Inquiries
+                  </h4>
+                  <div className="space-y-6">
+                    {adminData.inquiries.map(inquiry => (
+                      <div key={inquiry.id} className="p-6 rounded-2xl bg-[#F5F3ED] border border-[#E5E1D8]">
+                        <div className="flex justify-between items-start mb-4">
+                          <div>
+                            <h5 className="font-bold text-lg">{inquiry.companyName}</h5>
+                            <p className="text-sm text-[#8B9D77] font-medium">{inquiry.businessType}</p>
+                          </div>
+                          <span className="text-xs text-[#8E8A84]">{formatDate(inquiry.date)}</span>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 text-sm">
+                          <div className="flex items-center gap-2 text-[#8E8A84]">
+                            <Mail size={14} /> {inquiry.email || 'N/A'}
+                          </div>
+                          <div className="flex items-center gap-2 text-[#8E8A84]">
+                            <Phone size={14} /> {inquiry.countryCode} {inquiry.phone}
+                          </div>
+                        </div>
+                        <p className="text-sm text-[#2D2A26] bg-white p-4 rounded-xl border border-[#E5E1D8]">
+                          {inquiry.message}
+                        </p>
+                      </div>
+                    ))}
+                    {adminData.inquiries.length === 0 && (
+                      <p className="text-center text-[#8E8A84] py-8">No inquiries yet.</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-8">
+                {/* Settings Section */}
+                <div className="bg-white p-8 rounded-3xl border border-[#E5E1D8]">
+                  <div className="flex items-center justify-between mb-6">
+                    <h4 className="text-xl font-serif font-bold flex items-center gap-2">
+                      <SettingsIcon size={24} className="text-[#8B9D77]" /> Farm Settings
+                    </h4>
+                    {!isAdminEditMode && (
+                      <span className="text-[10px] uppercase tracking-widest bg-[#F5F3ED] text-[#8E8A84] px-3 py-1 rounded-full font-bold border border-[#E5E1D8]">
+                        Read Only
+                      </span>
+                    )}
+                  </div>
+                  <div className={`space-y-6 transition-all duration-500 ${!isAdminEditMode ? 'opacity-60 pointer-events-none grayscale-[0.2]' : ''}`}>
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-[#8E8A84] mb-2">Sales Email</label>
+                      <input 
+                        type="email" 
+                        disabled={!isAdminEditMode}
+                        value={settings?.email || ''}
+                        onChange={(e) => {
+                          setSettings(prev => prev ? {...prev, email: e.target.value} : null);
+                          setIsSettingsChanged(true);
+                          setIsSettingsSaved(false);
+                        }}
+                        className="w-full px-4 py-3 rounded-xl border border-[#E5E1D8] outline-none focus:ring-2 focus:ring-[#8B9D77] disabled:bg-[#FDFCF7]"
+                      />
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-[#8E8A84] mb-2">Email (Optional)</label>
+                        <input 
+                          type="email" 
+                          value={inquiryForm.email}
+                          onChange={(e) => setInquiryForm({...inquiryForm, email: e.target.value})}
+                          className="w-full px-4 py-3 rounded-xl border border-[#E5E1D8] outline-none focus:ring-2 focus:ring-[#8B9D77]" 
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-[#8E8A84] mb-2">Phone Number</label>
+                        <div className="flex gap-2">
+                          <select 
+                            value={inquiryForm.countryCode}
+                            onChange={(e) => setInquiryForm({...inquiryForm, countryCode: e.target.value})}
+                            className="w-32 px-2 py-3 rounded-xl border border-[#E5E1D8] outline-none focus:ring-2 focus:ring-[#8B9D77] text-sm"
+                          >
+                            {COUNTRIES.map(c => (
+                              <option key={`${c.id}-${c.code}`} value={c.code}>{c.code} ({c.id})</option>
+                            ))}
+                          </select>
+                          <input 
+                            type="tel" 
+                            required
+                            placeholder="98765 43210"
+                            value={inquiryForm.phone}
+                            onChange={(e) => setInquiryForm({...inquiryForm, phone: e.target.value})}
+                            className="flex-1 px-4 py-3 rounded-xl border border-[#E5E1D8] outline-none focus:ring-2 focus:ring-[#8B9D77]" 
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-[#8E8A84] mb-2">Message</label>
+                      <textarea 
+                        rows={4} 
+                        required
+                        value={inquiryForm.message}
+                        onChange={(e) => setInquiryForm({...inquiryForm, message: e.target.value})}
+                        className="w-full px-4 py-3 rounded-xl border border-[#E5E1D8] outline-none focus:ring-2 focus:ring-[#8B9D77]"
+                      ></textarea>
+                    </div>
+                    <button 
+                      type="submit"
+                      disabled={inquiryStatus === 'loading'}
+                      className="w-full bg-[#8B9D77] text-white py-4 rounded-xl font-bold hover:bg-[#7A8C66] transition-colors disabled:opacity-50"
+                    >
+                      {inquiryStatus === 'loading' ? 'Sending...' : 'Submit Inquiry'}
+                    </button>
+                  </form>
+                )}
+              </div>
+            </div>
+          </motion.div>
+        );
+      case 'admin':
+        if (currentUser?.role !== 'admin') {
+          setView('shop');
+          return null;
+        }
+        return (
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="max-w-7xl mx-auto px-4 py-24"
+          >
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-12">
+              <div>
+                <h2 className="text-sm uppercase tracking-[0.3em] text-[#8B9D77] font-bold mb-4">Admin Dashboard</h2>
+                <h3 className="text-4xl font-serif font-bold">Manage Your Farm</h3>
+              </div>
+              <div className="flex gap-4">
+                <button 
+                  onClick={async () => {
+                    if (!confirm('This will create login mappings for all existing users. Continue?')) return;
+                    try {
+                      const usersSnap = await getDocs(collection(db, 'users'));
+                      let count = 0;
+                      for (const userDoc of usersSnap.docs) {
+                        const data = userDoc.data() as User;
+                        if (data.username && data.email) {
+                          await setDoc(doc(db, 'usernames', data.username), {
+                            uid: data.id,
+                            email: data.email
+                          });
+                          count++;
+                        }
+                      }
+                      alert(`Successfully backfilled ${count} usernames.`);
+                    } catch (error) {
+                      console.error('Backfill error:', error);
+                      alert('Failed to backfill usernames. Check console for details.');
+                    }
+                  }}
+                  className="flex items-center gap-2 px-6 py-3 rounded-xl font-bold bg-[#8B9D77]/10 text-[#8B9D77] hover:bg-[#8B9D77]/20 transition-all"
+                  title="Fix username login for old users"
+                >
+                  <UserIcon size={20} /> Backfill Usernames
+                </button>
+                <button 
+                  onClick={() => setIsAdminEditMode(!isAdminEditMode)}
+                  className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold transition-all ${isAdminEditMode ? 'bg-[#2D2A26] text-white' : 'bg-[#8B9D77]/10 text-[#8B9D77] hover:bg-[#8B9D77]/20'}`}
+                >
+                  <Edit2 size={20} /> {isAdminEditMode ? 'Exit Edit Mode' : 'Edit Details'}
+                </button>
+                {isAdminEditMode && (
+                  <button 
+                    onClick={() => setIsAddingProduct(true)}
+                    className="flex items-center gap-2 bg-[#8B9D77] text-white px-6 py-3 rounded-xl font-bold hover:bg-[#7A8C66] transition-all"
+                  >
+                    <PlusCircle size={20} /> Add Product
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
+              <div className="lg:col-span-2 space-y-12">
+                {/* Products Section */}
+                <div className="bg-white p-8 rounded-3xl border border-[#E5E1D8]">
+                  <div className="flex items-center justify-between mb-6">
+                    <h4 className="text-xl font-serif font-bold flex items-center gap-2">
+                      <Package size={24} className="text-[#8B9D77]" /> Products
+                    </h4>
+                    {!isAdminEditMode && (
+                      <span className="text-[10px] uppercase tracking-widest bg-[#F5F3ED] text-[#8E8A84] px-3 py-1 rounded-full font-bold border border-[#E5E1D8]">
+                        Read Only
+                      </span>
+                    )}
+                  </div>
+                  <div className={`space-y-4 transition-all duration-500 ${!isAdminEditMode ? 'opacity-80' : ''}`}>
+                    {isAdminEditMode && isAddingProduct && (
+                      <div className="flex flex-col sm:flex-row items-center gap-6 p-6 rounded-2xl bg-[#8B9D77]/5 border-2 border-dashed border-[#8B9D77]">
+                        <div className="flex-1 w-full space-y-4">
+                          <h5 className="font-bold text-[#8B9D77]">Add New Product</h5>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <input 
+                              type="text" 
+                              placeholder="Product Name"
+                              value={newProductForm.name}
+                              onChange={(e) => setNewProductForm({...newProductForm, name: e.target.value})}
+                              className="w-full px-4 py-2 rounded-xl border border-[#E5E1D8] outline-none focus:ring-2 focus:ring-[#8B9D77]"
+                            />
+                            <ImageUploader 
+                              currentImage={newProductForm.image}
+                              onUpload={(base64) => setNewProductForm({...newProductForm, image: base64})}
+                              onRemove={() => setNewProductForm({...newProductForm, image: ''})}
+                              label="Product Image"
+                            />
+                          </div>
+                          <textarea 
+                            placeholder="Description"
+                            rows={2}
+                            value={newProductForm.description}
+                            onChange={(e) => setNewProductForm({...newProductForm, description: e.target.value})}
+                            className="w-full px-4 py-2 rounded-xl border border-[#E5E1D8] outline-none focus:ring-2 focus:ring-[#8B9D77]"
+                          />
+                          <div className="flex justify-end gap-3">
+                            <button 
+                              onClick={() => setIsAddingProduct(false)}
+                              className="px-6 py-2 rounded-xl text-[#8E8A84] font-bold hover:bg-[#F5F3ED]"
+                            >
+                              Cancel
+                            </button>
+                            <button 
+                              onClick={async () => {
+                                if (newProductForm.name) {
+                                  const productId = Date.now().toString();
+                                  const product = {
+                                    id: productId,
+                                    name: newProductForm.name,
+                                    description: newProductForm.description || '',
+                                    image: newProductForm.image || 'https://images.unsplash.com/photo-1586201375761-83865001e31c?auto=format&fit=crop&q=80&w=800',
+                                    category: 'Specialty',
+                                    price: 0,
+                                    rating: 5,
+                                    order: products.length
+                                  };
+                                  try {
+                                    await setDoc(doc(db, 'products', productId), product);
+                                    setIsAddingProduct(false);
+                                    setNewProductForm({ name: '', description: '', image: '', category: 'Specialty', price: 0, rating: 5 });
+                                    alert('Product added successfully!');
+                                  } catch (error) {
+                                    handleFirestoreError(error, OperationType.CREATE, `products/${productId}`);
+                                  }
+                                } else {
+                                  alert('Please enter at least the product name.');
+                                }
+                              }}
+                              className="px-6 py-2 bg-[#8B9D77] text-white rounded-xl font-bold hover:bg-[#7A8C66]"
+                            >
+                              Save Product
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    {products.map((product, index) => (
+                      <div key={product.id} className="flex flex-col sm:flex-row items-center gap-6 p-4 rounded-2xl bg-[#F5F3ED] border border-[#E5E1D8]">
+                        <img src={product.image || null} alt={product.name} className="w-20 h-20 object-cover rounded-xl" referrerPolicy="no-referrer" />
+                        <div className="flex-1 text-center sm:text-left">
+                          {editingProduct?.id === product.id ? (
+                            <div className="space-y-2">
+                              <input 
+                                type="text" 
+                                value={editingProduct.name}
+                                onChange={(e) => setEditingProduct({...editingProduct, name: e.target.value})}
+                                className="w-full px-3 py-1 rounded-lg border border-[#E5E1D8]"
+                              />
+                              <textarea 
+                                value={editingProduct.description}
+                                onChange={(e) => setEditingProduct({...editingProduct, description: e.target.value})}
+                                className="w-full px-3 py-1 rounded-lg border border-[#E5E1D8]"
+                              />
+                              <ImageUploader 
+                                currentImage={editingProduct.image}
+                                onUpload={(base64) => setEditingProduct({...editingProduct, image: base64})}
+                                onRemove={() => setEditingProduct({...editingProduct, image: ''})}
+                                label="Product Image"
+                              />
+                            </div>
+                          ) : (
+                            <>
+                              <h5 className="font-bold text-lg">{product.name}</h5>
+                              <p className="text-sm text-[#8E8A84] line-clamp-1">{product.description}</p>
+                            </>
+                          )}
+                        </div>
+                        {isAdminEditMode && (
+                          <div className="flex items-center gap-2">
+                            <div className="flex flex-col gap-1 mr-2">
+                              <button 
+                                onClick={async () => {
+                                  if (index > 0) {
+                                    const newProducts = [...products];
+                                    [newProducts[index - 1], newProducts[index]] = [newProducts[index], newProducts[index - 1]];
+                                    // Update all products with their new order
+                                    try {
+                                      await Promise.all(newProducts.map((p, i) => 
+                                        updateDoc(doc(db, 'products', p.id), { order: i })
+                                      ));
+                                    } catch (error) {
+                                      handleFirestoreError(error, OperationType.UPDATE, 'products/reorder');
+                                    }
+                                  }
+                                }}
+                                disabled={index === 0}
+                                className="p-1 text-[#8E8A84] hover:text-[#8B9D77] disabled:opacity-20"
+                              >
+                                <Plus className="rotate-0" size={16} />
+                              </button>
+                              <button 
+                                onClick={async () => {
+                                  if (index < products.length - 1) {
+                                    const newProducts = [...products];
+                                    [newProducts[index + 1], newProducts[index]] = [newProducts[index], newProducts[index + 1]];
+                                    // Update all products with their new order
+                                    try {
+                                      await Promise.all(newProducts.map((p, i) => 
+                                        updateDoc(doc(db, 'products', p.id), { order: i })
+                                      ));
+                                    } catch (error) {
+                                      handleFirestoreError(error, OperationType.UPDATE, 'products/reorder');
+                                    }
+                                  }
+                                }}
+                                disabled={index === products.length - 1}
+                                className="p-1 text-[#8E8A84] hover:text-[#8B9D77] disabled:opacity-20"
+                              >
+                                <Minus className="rotate-0" size={16} />
+                              </button>
+                            </div>
+                            {editingProduct?.id === product.id ? (
+                              <>
+                                <button 
+                                  onClick={async () => {
+                                    if (editingProduct) {
+                                      try {
+                                        await setDoc(doc(db, 'products', product.id), editingProduct);
+                                        setEditingProduct(null);
+                                        alert('Product updated successfully!');
+                                      } catch (error) {
+                                        handleFirestoreError(error, OperationType.UPDATE, `products/${product.id}`);
+                                      }
+                                    }
+                                  }}
+                                  className="px-4 py-2 bg-[#8B9D77] text-white rounded-lg text-sm font-bold"
+                                >
+                                  Save
+                                </button>
+                                <button 
+                                  onClick={() => setEditingProduct(null)}
+                                  className="px-4 py-2 bg-[#8E8A84] text-white rounded-lg text-sm font-bold"
+                                >
+                                  Cancel
+                                </button>
+                              </>
+                            ) : (
+                              <button 
+                                onClick={() => setEditingProduct(product)}
+                                className="p-2 text-[#8E8A84] hover:text-[#8B9D77] transition-colors"
+                              >
+                                <Edit2 size={20} />
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Users Section */}
+                <div className="bg-white p-8 rounded-3xl border border-[#E5E1D8]">
+                  <h4 className="text-xl font-serif font-bold mb-6 flex items-center gap-2">
+                    <UserIcon size={24} className="text-[#8B9D77]" /> Registered Users
+                  </h4>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left">
+                      <thead>
+                        <tr className="border-b border-[#E5E1D8]">
+                          <th className="py-4 text-xs font-bold uppercase tracking-wider text-[#8E8A84]">Name</th>
+                          <th className="py-4 text-xs font-bold uppercase tracking-wider text-[#8E8A84]">Username</th>
+                          <th className="py-4 text-xs font-bold uppercase tracking-wider text-[#8E8A84]">Email</th>
+                          <th className="py-4 text-xs font-bold uppercase tracking-wider text-[#8E8A84]">Phone</th>
                           <th className="py-4 text-xs font-bold uppercase tracking-wider text-[#8E8A84] text-right">Actions</th>
                         </tr>
                       </thead>
