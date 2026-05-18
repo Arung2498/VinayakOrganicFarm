@@ -439,23 +439,32 @@ export default function App() {
 
   // Auth State Listener
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+    const unsubscribeAuth = onAuthStateChanged(auth, (firebaseUser) => {
       if (firebaseUser) {
-        try {
-          const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
-          if (userDoc.exists()) {
-            const userData = userDoc.data() as User;
-            setCurrentUser(userData);
+        // Use onSnapshot for real-time profile updates and better offline resilience
+        const unsubProfile = onSnapshot(doc(db, 'users', firebaseUser.uid), async (snapshot) => {
+          if (snapshot.exists()) {
+            const userData = snapshot.data() as User;
+            setCurrentUser({ ...userData, id: snapshot.id });
             localStorage.setItem('vinayak_user', JSON.stringify(userData));
 
             // Backfill username mapping if it doesn't exist
             if (userData.username) {
-              const usernameDoc = await getDoc(doc(db, 'usernames', userData.username));
-              if (!usernameDoc.exists()) {
-                await setDoc(doc(db, 'usernames', userData.username), {
-                  uid: firebaseUser.uid,
-                  email: firebaseUser.email
-                });
+              const usernameRef = doc(db, 'usernames', userData.username);
+              try {
+                // Use getDoc as a one-time check
+                const usernameDoc = await getDoc(usernameRef);
+                if (!usernameDoc.exists()) {
+                  await setDoc(usernameRef, {
+                    uid: firebaseUser.uid,
+                    email: firebaseUser.email
+                  });
+                }
+              } catch (e) {
+                // Log only if not an offline error to avoid spam
+                if (!(e instanceof Error && e.message.includes('offline'))) {
+                  console.warn('Optional username check failed:', e);
+                }
               }
             }
           } else {
@@ -477,16 +486,24 @@ export default function App() {
               console.warn('User authenticated but no Firestore profile found');
             }
           }
-        } catch (error) {
-          console.error('Error fetching user profile:', error);
-        }
+          setIsAuthReady(true);
+        }, (error) => {
+          if (error.message.includes('offline')) {
+            console.info('Firestore client is offline, waiting for connection...');
+          } else {
+            console.error('Error fetching user profile:', error);
+          }
+          setIsAuthReady(true);
+        });
+
+        return () => unsubProfile();
       } else {
         setCurrentUser(null);
         localStorage.removeItem('vinayak_user');
+        setIsAuthReady(true);
       }
-      setIsAuthReady(true);
     });
-    return () => unsubscribe();
+    return () => unsubscribeAuth();
   }, []);
 
   // Connection Test and Migration
@@ -535,7 +552,7 @@ export default function App() {
           return;
         }
         if (error instanceof Error && error.message.includes('the client is offline')) {
-          console.error("Please check your Firebase configuration. The client could not reach the backend.");
+          console.info("Firestore is currently offline. Initial setup will be completed once connection is restored.");
         } else {
           console.error("Initial setup error:", error);
         }
@@ -565,22 +582,22 @@ export default function App() {
   // Load cart from Firestore on login
   useEffect(() => {
     if (currentUser && isAuthReady) {
-      const loadCart = async () => {
-        try {
-          const userDoc = await getDoc(doc(db, 'users', currentUser.id));
-          if (userDoc.exists()) {
-            const userData = userDoc.data();
-            if (userData.cart && userData.cart.length > 0 && cart.length === 0) {
-              setCart(userData.cart);
-            }
+      // Use onSnapshot for cart too, to be more resilient and keep it in sync
+      const unsubCart = onSnapshot(doc(db, 'users', currentUser.id), (snapshot) => {
+        if (snapshot.exists()) {
+          const userData = snapshot.data();
+          if (userData.cart && userData.cart.length > 0 && cart.length === 0) {
+            setCart(userData.cart);
           }
-        } catch (error) {
+        }
+      }, (error) => {
+        if (!error.message.includes('offline')) {
           console.error('Error loading cart from Firestore:', error);
         }
-      };
-      loadCart();
+      });
+      return () => unsubCart();
     }
-  }, [currentUser, isAuthReady]);
+  }, [currentUser, isAuthReady, cart.length]);
 
   // Fetch user orders
   useEffect(() => {
@@ -635,15 +652,15 @@ export default function App() {
   useEffect(() => {
     if (view === 'admin' && currentUser?.role === 'admin') {
       const unsubUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
-        setAdminData(prev => ({ ...prev, users: snapshot.docs.map(doc => doc.data() as User) }));
+        setAdminData(prev => ({ ...prev, users: snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as User)) }));
       }, (error) => handleFirestoreError(error, OperationType.LIST, 'users'));
 
       const unsubOrders = onSnapshot(collection(db, 'orders'), (snapshot) => {
-        setAdminData(prev => ({ ...prev, orders: snapshot.docs.map(doc => doc.data() as Order) }));
+        setAdminData(prev => ({ ...prev, orders: snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Order)) }));
       }, (error) => handleFirestoreError(error, OperationType.LIST, 'orders'));
 
       const unsubInquiries = onSnapshot(collection(db, 'inquiries'), (snapshot) => {
-        setAdminData(prev => ({ ...prev, inquiries: snapshot.docs.map(doc => doc.data()) }));
+        setAdminData(prev => ({ ...prev, inquiries: snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })) }));
       }, (error) => handleFirestoreError(error, OperationType.LIST, 'inquiries'));
 
       return () => {
@@ -659,7 +676,7 @@ export default function App() {
     if (currentUser && view === 'account') {
       const q = query(collection(db, 'orders'), where('customer.id', '==', currentUser.id));
       const unsubscribe = onSnapshot(q, (snapshot) => {
-        setOrderHistory(snapshot.docs.map(doc => doc.data() as Order));
+        setOrderHistory(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Order)));
       }, (error) => handleFirestoreError(error, OperationType.LIST, 'orders'));
       return () => unsubscribe();
     }
@@ -702,25 +719,8 @@ export default function App() {
     }, 100);
   };
 
-  // Load order history from server on mount or user change
-  useEffect(() => {
-    const fetchOrders = async () => {
-      if (currentUser) {
-        try {
-          const response = await fetch(`/api/orders/${currentUser.id}`);
-          const data = await response.json();
-          if (data.success) {
-            setOrderHistory(data.orders);
-          }
-        } catch (error) {
-          console.error('Error fetching orders:', error);
-        }
-      } else {
-        setOrderHistory([]);
-      }
-    };
-    fetchOrders();
-  }, [currentUser]);
+  // Load order history from Firestore is already handled by the onSnapshot listener above.
+  // The fetch call to /api/orders/${currentUser.id} is legacy and will not work on Netlify.
 
   const sendEmail = async (to: string, subject: string, body: string) => {
     try {
@@ -730,6 +730,16 @@ export default function App() {
         body: JSON.stringify({ to, subject, body }),
       });
       const data = await response.json();
+      
+      if (data.isSimulation) {
+        console.info('Email Simulation:', data.message);
+        console.info('To:', to);
+        console.info('Subject:', subject);
+        console.info('Body:', body);
+      } else if (!data.success) {
+        console.error('Email failed to send:', data.error);
+      }
+      
       return data.success;
     } catch (error) {
       console.error('Email API Error:', error);
@@ -772,6 +782,49 @@ export default function App() {
     }
   };
 
+  const deleteOrder = async (orderId: string) => {
+    if (!window.confirm('Are you sure you want to delete this order?')) return;
+    try {
+      await deleteDoc(doc(db, 'orders', orderId));
+      alert('Order deleted successfully');
+    } catch (error) {
+      console.error('Delete order error:', error);
+      alert('Failed to delete order. Check your internet connection or permissions.');
+      handleFirestoreError(error, OperationType.DELETE, `orders/${orderId}`);
+    }
+  };
+
+  const deleteInquiry = async (inquiryId: string) => {
+    if (!window.confirm('Are you sure you want to delete this wholesale inquiry?')) return;
+    try {
+      await deleteDoc(doc(db, 'inquiries', inquiryId));
+      alert('Inquiry deleted successfully');
+    } catch (error) {
+      console.error('Delete inquiry error:', error);
+      alert('Failed to delete inquiry. Check your internet connection or permissions.');
+      handleFirestoreError(error, OperationType.DELETE, `inquiries/${inquiryId}`);
+    }
+  };
+
+  const deleteUser = async (userId: string, username?: string) => {
+    if (!window.confirm('Are you sure you want to delete this user? This action cannot be undone.')) return;
+    try {
+      await deleteDoc(doc(db, 'users', userId));
+      if (username) {
+        try {
+          await deleteDoc(doc(db, 'usernames', username));
+        } catch (usernameError) {
+          console.warn('Could not delete username mapping:', usernameError);
+        }
+      }
+      alert('User deleted successfully');
+    } catch (error) {
+      console.error('Delete user error:', error);
+      alert('Failed to delete user. Check your internet connection or permissions.');
+      handleFirestoreError(error, OperationType.DELETE, `users/${userId}`);
+    }
+  };
+
   const handleCheckout = async () => {
     if (!currentUser) {
       alert('Please login or register to place an order');
@@ -802,7 +855,7 @@ export default function App() {
         handleFirestoreError(error, OperationType.CREATE, `orders/${orderId}`);
       }
 
-      console.log('Order Sent to vinayakorganicfarmvmm@gmail.com:', orderData);
+      console.log(`Order Sent to ${settings?.email || 'vinayakorganicfarmvmm@gmail.com'}:`, orderData);
       
       // Construct email content
       const subject = `New Order: ${orderId}`;
@@ -825,10 +878,21 @@ Vinayak Organic Rice Farm
       `.trim();
       
       // Send automated emails via backend
-      const salesEmail = 'vinayakorganicfarmvmm@gmail.com';
+      const salesEmail = settings?.email || 'vinayakorganicfarmvmm@gmail.com';
       await sendEmail(salesEmail, subject, body);
       
-      setLastOrder({ items: [...cart], total: cartTotal, id: orderId });
+      setLastOrder({ 
+        items: [...cart], 
+        total: cartTotal, 
+        id: orderId,
+        timestamp: { seconds: Math.floor(Date.now() / 1000) },
+        customer: {
+          id: currentUser.id,
+          name: currentUser.name,
+          email: currentUser.email,
+          phone: currentUser.phone
+        }
+      } as any);
       setCheckoutStatus('success');
       setCart([]);
       setIsCartOpen(false);
@@ -938,12 +1002,14 @@ Vinayak Organic Rice Farm
       console.error('Login error:', error);
       if (error.code === 'auth/operation-not-allowed') {
         setLoginError("Email/Password authentication is not enabled in the Firebase Console. Please enable it under Authentication > Sign-in method.");
-      } else if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+      } else if (error.code === 'auth/invalid-credential') {
+        setLoginError("Invalid email/username or password. If you haven't registered yet, please create an account.");
+      } else if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
         setLoginError("Invalid credentials. Please check your username/email and password.");
       } else {
         setLoginError(error.message || 'Login failed');
       }
-      alert(error.message || 'Login failed');
+      // alert(error.message || 'Login failed'); // Removed alert to avoid nested popups
     }
   };
 
@@ -1121,7 +1187,7 @@ ${inquiryForm.message}
       `.trim();
       
       // Send automated email via backend
-      const salesEmail = 'vinayakorganicfarmvmm@gmail.com';
+      const salesEmail = settings?.email || 'vinayakorganicfarmvmm@gmail.com';
       await sendEmail(salesEmail, subject, body);
       
       setInquiryStatus('success');
@@ -1430,7 +1496,7 @@ ${inquiryForm.message}
                     </div>
                   ) : (
                     <div className="space-y-6">
-                      {orderHistory.map((order) => (
+                      {orderHistory?.map((order) => (
                         <div key={order.id} className="p-6 rounded-2xl bg-[#F5F3ED] border border-[#E5E1D8]">
                           <div className="flex justify-between items-start mb-4">
                             <div>
@@ -1446,7 +1512,7 @@ ${inquiryForm.message}
                             </button>
                           </div>
                           <div className="space-y-2">
-                            {order.items.map((item, idx) => (
+                            {order.items?.map((item, idx) => (
                               <div key={idx} className="flex justify-between text-sm">
                                 <span>{item.name} x {item.quantity}</span>
                               </div>
@@ -1575,7 +1641,7 @@ ${inquiryForm.message}
                     </div>
                     <h5 className="text-xl font-serif font-bold mb-2">Inquiry Sent!</h5>
                     <p className="text-[#8E8A84] mb-8">
-                      Thank you for your interest. Our wholesale team will review your inquiry and get back to you within 24-48 hours. A copy of this inquiry has been sent to vinayakorganicfarmvmm@gmail.com.
+                      Thank you for your interest. Our wholesale team will review your inquiry and get back to you within 24-48 hours. A copy of this inquiry has been sent to {settings?.email || 'vinayakorganicfarmvmm@gmail.com'}.
                     </p>
                     <button 
                       onClick={() => setInquiryStatus('idle')}
@@ -1938,15 +2004,29 @@ ${inquiryForm.message}
                           <th className="py-4 text-xs font-bold uppercase tracking-wider text-[#8E8A84]">Username</th>
                           <th className="py-4 text-xs font-bold uppercase tracking-wider text-[#8E8A84]">Email</th>
                           <th className="py-4 text-xs font-bold uppercase tracking-wider text-[#8E8A84]">Phone</th>
+                          <th className="py-4 text-xs font-bold uppercase tracking-wider text-[#8E8A84] text-right">Actions</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-[#E5E1D8]">
-                        {adminData.users.map(user => (
+                        {adminData.users?.map(user => (
                           <tr key={user.id}>
                             <td className="py-4 text-sm font-medium">{user.name}</td>
                             <td className="py-4 text-sm text-[#8E8A84]">{user.username}</td>
                             <td className="py-4 text-sm text-[#8E8A84]">{user.email}</td>
                             <td className="py-4 text-sm text-[#8E8A84]">{user.phone}</td>
+                            <td className="py-4 text-sm text-right">
+                              <button 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  deleteUser(user.id, user.username);
+                                }}
+                                className="p-2 text-[#8E8A84] hover:text-red-500 transition-colors bg-white/50 rounded-lg inline-flex"
+                                title="Delete User"
+                                disabled={user.email === currentUser?.email}
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -1960,14 +2040,26 @@ ${inquiryForm.message}
                     <Mail size={24} className="text-[#8B9D77]" /> Wholesale Inquiries
                   </h4>
                   <div className="space-y-6">
-                    {adminData.inquiries.map(inquiry => (
+                    {adminData.inquiries?.map(inquiry => (
                       <div key={inquiry.id} className="p-6 rounded-2xl bg-[#F5F3ED] border border-[#E5E1D8]">
                         <div className="flex justify-between items-start mb-4">
                           <div>
                             <h5 className="font-bold text-lg">{inquiry.companyName}</h5>
                             <p className="text-sm text-[#8B9D77] font-medium">{inquiry.businessType}</p>
                           </div>
-                          <span className="text-xs text-[#8E8A84]">{formatDate(inquiry.date)}</span>
+                          <div className="flex items-center gap-4">
+                            <span className="text-xs text-[#8E8A84]">{formatDate(inquiry.date)}</span>
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                deleteInquiry(inquiry.id);
+                              }}
+                              className="p-2 text-[#8E8A84] hover:text-red-500 transition-colors bg-white/50 rounded-lg"
+                              title="Delete Inquiry"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 text-sm">
                           <div className="flex items-center gap-2 text-[#8E8A84]">
@@ -1982,7 +2074,7 @@ ${inquiryForm.message}
                         </p>
                       </div>
                     ))}
-                    {adminData.inquiries.length === 0 && (
+                    {(!adminData.inquiries || adminData.inquiries.length === 0) && (
                       <p className="text-center text-[#8E8A84] py-8">No inquiries yet.</p>
                     )}
                   </div>
@@ -2294,7 +2386,7 @@ ${inquiryForm.message}
                     <ShoppingCart size={24} className="text-[#8B9D77]" /> Recent Orders
                   </h4>
                   <div className="space-y-4">
-                    {adminData.orders.map(order => (
+                    {adminData.orders?.map(order => (
                       <div key={order.id} className="p-4 rounded-xl bg-[#F5F3ED] border border-[#E5E1D8]">
                         <div className="flex justify-between items-center mb-2">
                           <span className="text-xs font-bold text-[#8E8A84]">#{order.id.slice(-6)}</span>
@@ -2302,7 +2394,7 @@ ${inquiryForm.message}
                         </div>
                         <p className="text-sm font-bold mb-1">{order.customer.name}</p>
                         <div className="text-xs text-[#8E8A84] mb-3 space-y-1">
-                          {order.items.map((item, idx) => (
+                          {order.items?.map((item, idx) => (
                             <div key={idx}>{item.name} x {item.quantity}</div>
                           ))}
                         </div>
@@ -2317,10 +2409,20 @@ ${inquiryForm.message}
                             <option value="completed">Completed</option>
                             <option value="cancelled">Cancelled</option>
                           </select>
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteOrder(order.id);
+                            }}
+                            className="p-2 text-[#8E8A84] hover:text-red-500 transition-colors bg-white/50 rounded-lg"
+                            title="Delete Order"
+                          >
+                            <Trash2 size={16} />
+                          </button>
                         </div>
                       </div>
                     ))}
-                    {adminData.orders.length === 0 && (
+                    {(!adminData.orders || adminData.orders.length === 0) && (
                       <p className="text-center text-[#8E8A84] py-4 text-sm">No orders yet.</p>
                     )}
                   </div>
@@ -2996,12 +3098,12 @@ ${inquiryForm.message}
               </div>
               <h3 className="text-3xl font-serif font-bold mb-4">Order Confirmed!</h3>
               <p className="text-[#8E8A84] mb-8">
-                Thank you for your purchase. We've sent the order details to our sales team (vinayakorganicfarmvmm@gmail.com). You can download a copy of your order below.
+                Thank you for your purchase. We've sent the order details to our sales team ({settings?.email || 'vinayakorganicfarmvmm@gmail.com'}). You can download a copy of your order below.
               </p>
               
               <div className="mb-8">
                 <button 
-                  onClick={downloadOrderCopy}
+                  onClick={() => downloadOrderCopy()}
                   className="w-full flex items-center justify-center gap-2 bg-[#F5F3ED] text-[#2D2A26] py-3 rounded-xl font-bold hover:bg-[#E5E1D8] transition-colors text-sm"
                 >
                   <Package size={18} /> Download Order Copy
@@ -3091,7 +3193,7 @@ ${inquiryForm.message}
                     {userOrders.length > 0 && (
                       <div className="space-y-6">
                         <h4 className="text-sm uppercase tracking-widest font-bold text-[#8B9D77]">Order History</h4>
-                        {userOrders.map((order) => (
+                        {userOrders?.map((order) => (
                           <div key={order.id} className="p-4 rounded-xl bg-[#F5F3ED] border border-[#E5E1D8]">
                             <div className="flex justify-between items-center mb-2">
                               <span className="text-xs font-bold text-[#8E8A84]">#{order.id.slice(-6)}</span>
@@ -3107,7 +3209,7 @@ ${inquiryForm.message}
                               </button>
                             </div>
                             <div className="space-y-1">
-                              {order.items.map((item, idx) => (
+                              {order.items?.map((item, idx) => (
                                 <p key={idx} className="text-xs text-[#8E8A84]">{item.name} x {item.quantity}</p>
                               ))}
                             </div>
@@ -3315,7 +3417,7 @@ ${inquiryForm.message}
                 </li>
                 <li className="flex items-center gap-3">
                   <Mail size={18} className="flex-shrink-0" />
-                  <span className="break-all">vinayakorganicfarmvmm@gmail.com</span>
+                  <span className="break-all">{settings?.email || 'vinayakorganicfarmvmm@gmail.com'}</span>
                 </li>
               </ul>
             </div>
