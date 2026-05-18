@@ -160,11 +160,17 @@ async function startServer() {
 
     if (!process.env.RESEND_API_KEY) {
       console.warn('RESEND_API_KEY is not set. Email will not be sent.');
-      return res.status(200).json({ success: true, message: 'Email simulation (API key missing)' });
+      return res.status(200).json({ 
+        success: true, 
+        message: 'Email simulation (API key missing)',
+        isSimulation: true 
+      });
     }
 
     try {
       const resend = getResendClient();
+      // NOTE: Resend's free tier (onboarding@resend.dev) only allows sending to the account owner's email.
+      // To send to any recipient, you must verify your domain in the Resend dashboard.
       const data = await resend.emails.send({
         from: 'Vinayak Organic Farm <onboarding@resend.dev>',
         to: to,
@@ -172,10 +178,15 @@ async function startServer() {
         text: body,
       });
 
+      if (data.error) {
+        console.error('Resend Error:', data.error);
+        return res.status(400).json({ success: false, error: data.error });
+      }
+
       res.status(200).json({ success: true, data });
     } catch (error) {
       console.error('Error sending email:', error);
-      res.status(500).json({ success: false, error });
+      res.status(500).json({ success: false, error: error instanceof Error ? error.message : String(error) });
     }
   });
 
